@@ -1,31 +1,36 @@
+#Packages for deep learning
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+from transformers import BertTokenizer, pipeline
+from torch.utils.data import DataLoader
 
+#Personal modules
 import neural_networks
 import data_manager
 
-from torch.utils.data import Dataset, DataLoader
+#Packages for evaluation of results
 from sklearn.metrics import r2_score
-from torchmetrics.regression import MeanSquaredLogError, SpearmanCorrCoef
+from torchmetrics.regression import SpearmanCorrCoef
 
-from transformers import TFBertModel, BertTokenizer, BertModel, pipeline, AutoTokenizer, AutoModel
-import re
+#Additional useful packages
 import time
+from tqdm import tqdm
+
+
 
 print("starting program!")
 
-#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using {} for LSTM model, bert model is computed on CPU", device.type)
 #read excel file
 data = pd.read_excel("~/Project/Neural-Network/data_from_Ens_Grad.xlsx")
 data = data.dropna().reset_index(drop = True)
 data = data_manager.remove_missing_values(data)
 
-#data = data.iloc[:1000,:]
+data = data.iloc[:1000,:]
 print("number of sequences :", len(data))
 
 #spliting data to train and test and one hot encoding sequences
@@ -33,11 +38,8 @@ train_x, test_x, train_y, test_y, enrichment_factor = data_manager.preprocessing
 
 print("data splitted into training and testing")
 
-#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = BertTokenizer.from_pretrained("Rostlab/prot_bert")
-
-
-embeddings_pipeline = pipeline(task = "feature-extraction", model = "Rostlab/prot_bert", tokenizer = "Rostlab/prot_bert", framework = 'pt', device = device)
+embeddings_pipeline = pipeline(task = "feature-extraction", model = "Rostlab/prot_bert", tokenizer = "Rostlab/prot_bert", framework = 'pt')
 
 #embedding sequence using batches of size 64
 embeddings_train_x = []
@@ -50,24 +52,26 @@ test_sequences_loader = DataLoader(dataset = dataset_sequences_test, batch_size 
 start = time.time()
 print("starting embedding")
 
-for sequences in train_sequences_loader:
+for sequences in tqdm(train_sequences_loader):
     embeddings = embeddings_pipeline(sequences)
     embeddings_train_x.extend(embeddings)
 
 end = time.time()
 
-print("embeddings time in seconds: ", end - start)
+print("Finished embedding training set: ", end - start, "s")
+start = time.time()
 
-for sequences in test_sequences_loader:
+for sequences in tqdm(test_sequences_loader):
     embeddings = embeddings_pipeline(sequences)
     embeddings_test_x.extend(embeddings)
 
-print("finished embedding train and test sequences")
+end = time.time()
+print(f"Finished embedding test set: {end - start}s")
 
-input_train_x = torch.tensor(embeddings_train_x).squeeze().to(device)
-input_test_x = torch.tensor(embeddings_test_x).squeeze().to(device)
-train_y = torch.tensor(train_y).to(device)
-test_y = torch.tensor(test_y).to(device)
+input_train_x = torch.tensor(embeddings_train_x).squeeze()
+input_test_x = torch.tensor(embeddings_test_x).squeeze()
+train_y = torch.tensor(train_y)
+test_y = torch.tensor(test_y)
 
 max_length = input_train_x.shape[1]
 
@@ -97,15 +101,17 @@ spearman_train_list = []
 spearman_test_list = []
 epoch_list = []
 losses = []
-num_epochs = 201
+num_epochs = 501
 print("starting training loop")
-for epoch in range(num_epochs):
+for epoch in tqdm(range(num_epochs)):
 
     predictions = []
     targets = []
 
     total_loss = 0
     for x, y in train_loader:
+        x = x.to(device)
+        y = y.to(device)
         y_pred = model.forward(x)
         loss = loss_fc(y_pred, y)
         total_loss += loss.item()
@@ -136,6 +142,8 @@ for epoch in range(num_epochs):
         test_labels = []
 
         for x, y in test_loader:
+            x = x.to(device)
+            y = y.to(device)
             y_pred = model.forward(x)
             test_predictions.extend(y_pred.tolist())
             test_labels.extend(y.tolist())
@@ -171,18 +179,27 @@ test_labels = []
 #results_df['labels'] = targets
 
 plt.plot(losses)
+plt.title("Loss function over Epochs")
 plt.xlabel("epochs")
 plt.ylabel("loss")
-plt.show()
+plt.savefig("/Home/Figures/losses.png")
 
 plt.plot(r2_scores_train)
 plt.title("r2 score of training set")
 plt.xlabel("epochs")
 plt.ylabel("r2 scores")
-plt.show()
+plt.savefig("/Home/Figures/training_r2_score.png")
 
 plt.plot(r2_score_test)
 plt.title("r2 score of testing set")
 plt.xlabel("epochs")
 plt.ylabel("r2 scores")
-plt.show()
+plt.savefig("/Home/Figures/testing_r2_score.png")
+
+#plotting ground trutch enrichment (x) and predicted enrichment (y)
+#can add for training and for testing
+plt.plot(targets, predictions)
+plt.title("Ground truth enrichment score and Predicted enrichment score")
+plt.xlabel("Ground truth enrichment score")
+plt.ylabel("Predictd enrichment score")
+plt.savefig("/Home/Figures/train_Truth_vs_Predicted.png")
