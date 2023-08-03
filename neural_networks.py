@@ -1,26 +1,20 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
+#Packages for deep learning
 import torch
 import torch.nn as nn
-import math
-import random
-from utils import *
-from sklearn.metrics import r2_score
-#from transformers import TFBertModel, BertTokenizer, BertModel
 
-#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Bert(nn.Module):
-    def __init__(self, max_length, hidden_size = 64, num_layers = 1):
+    def __init__(self, max_length, hidden_size = 1024, num_layers = 3):
         super (Bert, self).__init__()
 
+        """
+        #linear version
         self.linear1 = nn.Linear(1024, 1)
         self.linear2 = nn.Linear(max_length,1)
         """
+
+        #LSTM version
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
@@ -28,20 +22,29 @@ class Bert(nn.Module):
         self.linear1 = nn.Linear(int(self.hidden_size * 2), 1)
         self.linear2 = nn.Linear(max_length, 128)
         self.linear3 = nn.Linear(128, 1)
-        """
 
     #the model's input is: a str repressenting the amino acid sequence
     #since tokenizing and embedding is happening within the model
     def forward(self, x : torch.tensor):
-        
-
+        """
+        #linear version
         output = torch.tanh(self.linear1(x))
         output = output.squeeze()
         output = torch.tanh(self.linear2(output))
         output = output.squeeze()
 
         return output
+        """
+        h0 = torch.zeros(2 * self.num_layers, x.shape[0], self.hidden_size).to(device)
+        c0 = torch.zeros(2 * self.num_layers, x.shape[0], self.hidden_size).to(device)
 
+        output, _ = self.lstm(x, (h0, c0))
+        output = torch.tanh(self.linear1(output))
+        output = output.squeeze(2)
+        output = torch.tanh(self.linear2(output))
+        output = torch.tanh(self.linear3(output))
+
+        return output.squeeze(1)
 
 
 

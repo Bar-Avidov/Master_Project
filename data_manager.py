@@ -1,19 +1,12 @@
 import torch
-import utils
 import numpy as np
 from sklearn.model_selection import train_test_split
-from torch. utils. data import Dataset, DataLoader
+from torch. utils.data import Dataset
 import pandas as pd
-from torch.nn.utils.rnn import pad_sequence
-import torch.nn as nn
-from transformers import BertTokenizer
-from sklearn.preprocessing import MinMaxScaler
 from transformers import BertTokenizer
 
 
-###########################################################################################
-
-
+#Class for handling amino acid sequences only
 class DataSetSequences(Dataset):
     def __init__(self, sequences):
         self.sequences = sequences
@@ -24,6 +17,7 @@ class DataSetSequences(Dataset):
     def __len__(self):
         return len(self.sequences)
 
+#class for handling amino acid sequeces and corresponding enrichment scores
 class DataSetForBert(Dataset):
     def __init__(self, sequences, scores):
 
